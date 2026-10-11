@@ -1,0 +1,16 @@
+# macOS
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+
+# Model artifacts and outputs
+outputs/
+*.zip
+*.tar.gz
+my_gemma_model/
+my_gemma_lora_temp/
