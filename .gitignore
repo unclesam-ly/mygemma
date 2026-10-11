@@ -7,6 +7,9 @@
 # Python
 __pycache__/
 *.pyc
+.venv/
+venv/
+
 
 # Model artifacts and outputs
 outputs/
