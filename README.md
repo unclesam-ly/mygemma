@@ -1,38 +1,45 @@
-# Gemma-4-E2B-Chinese-Alpaca 🦙✨
+# Gemma-4-E2B-Chinese-R1 🧠✨
 
-基于 **Google Gemma 4** 原生多模态轻量基座，在 **Google Colab (Tesla T4 GPU)** 上使用 **Unsloth + QLoRA (4-bit)** 完成的中文指令微调项目。
+基于 **Google Gemma 4 (E2B)** 原生轻量基座，在 **Google Colab (Tesla T4 GPU)** 上使用 **Unsloth + QLoRA (4-bit)** 完成的**通用中文指令 + DeepSeek-R1 深度思考链（CoT）**双融合微调项目。
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/)
+包含端到端训练 Notebook，以及针对 **Apple Silicon (Mac M系列 MPS 加速) / NVIDIA CUDA** 深度优化的流式交互终端对话脚本 `chat.py`。
+
 [![Base Model](https://img.shields.io/badge/Base%20Model-Google%20Gemma%204%20E2B-blue)](https://huggingface.co/google)
 [![Fine-Tuning](https://img.shields.io/badge/Method-QLoRA%204--bit%20(Unsloth)-green)](https://github.com/unslothai/unsloth)
-[![Dataset](https://img.shields.io/badge/Dataset-alpaca--zh%20(5000%20samples)-orange)](https://huggingface.co/datasets/shibing624/alpaca-zh)
+[![Alpaca Dataset](https://img.shields.io/badge/Dataset-alpaca--zh%20(2k)-orange)](https://huggingface.co/datasets/shibing624/alpaca-zh)
+[![R1 Dataset](https://img.shields.io/badge/Dataset-DeepSeek--R1--Distill%20(1k)-purple)](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
 
 ---
 
-## 📖 项目简介 (Overview)
+## 🌟 项目特色 (Highlights)
 
-本项目演示了如何在消费级/免费云端算力（**单卡 Tesla T4 15GB 显存**）上，以极低显存开销与高吞吐速度完成 Google 最新的 **Gemma 4** 架构模型微调：
-* **高效微调**：借助 Unsloth 核心优化，将 2B~4B 级别模型显存压缩至 ~4GB，训练提速 2~5 倍；
-* **中文适配**：基于经典的开源中文高质量指令集 `shibing624/alpaca-zh`（5,000 条），让英文基座快速具备地道、规范的中文遵循与问答能力；
-* **工程友好**：代码兼容 VS Code 远程连接 Colab 环境，自带多模态 Processor 避坑处理与防爆内存导出方案。
+* **极低算力成本**：在 Google Colab 免费级 **Tesla T4 (15GB)** 单卡上，通过 Unsloth 4-bit 量化仅耗时约 **35 分钟** 即可完成微调，极度节省算力单元。
+* **双模态能力融合**：
+  * **2,000 条** `alpaca-zh`：赋予基座规范、流畅的日常中文问答与指令遵循能力；
+  * **1,000 条** `Chinese-DeepSeek-R1-Distill`：注入 DeepSeek-R1 `<think>` 慢思考灵魂，支持逻辑反思与逐步推导。
+* **开箱即用的终端交互 (`chat.py`)**：
+  * ⚡ **自动硬件加速**：原生优先调用 Apple Silicon 的 **Metal (MPS)** GPU 加速，同时支持 NVIDIA CUDA 与 CPU 优雅降级；
+  * 🌊 **实时打字机流式输出**：基于 `TextStreamer` 逐字吐出推理与回答；
+  * 🧠 **思维链管理与历史隔离**：实时展示思考过程，在多轮对话中自动剥离思考痕迹，仅将最终回答存入上下文，防止历史窗口污染与漂移。
 
 ---
 
-## ⚙️ 硬件与实验配置 (Configuration)
+## ⚙️ 实验与微调配置 (Configuration)
 
 | 维度 | 配置详情 |
 | :--- | :--- |
-| **计算平台** | Google Colab（通过 VS Code 远程连接内核） |
+| **计算平台** | Google Colab (通过 VS Code 远程连接) |
 | **计算卡** | NVIDIA Tesla T4 (15.36 GB 显存) |
-| **基础模型** | `unsloth/gemma-4-E2B-it` (4-bit 预量化版本) |
+| **基础底座** | `unsloth/gemma-4-E2B-it` (4-bit 预量化版本) |
 | **微调算法** | QLoRA (Rank $r=16$, $\alpha=16$, dropout=0) |
-| **目标模块** | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj` |
-| **训练数据** | `shibing624/alpaca-zh` 前 5,000 条指令样本 |
+| **LoRA 目标模块** | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj` |
+| **融合数据集** | `alpaca-zh` (2000条) + `Chinese-DeepSeek-R1-Distill-110k` (1000条过滤精选) |
+| **总数据量** | 2,778 条有效混合样本 |
 | **序列长度** | `max_seq_length = 2048` |
-| **Batch 大小** | `per_device_batch_size = 2`, `gradient_accumulation_steps = 4` (有效 Batch = 8) |
-| **学习率与步数** | `lr = 2e-4`, 余弦退火, `warmup_steps = 10`, 训练 1 个完整 Epoch (~625 steps) |
-| **单卡训练耗时** | 约 **31 ~ 37 分钟**（T4 GPU） |
+| **Batch 大小** | `per_device_batch_size = 2`, `gradient_accumulation_steps = 4` (等效 Batch = 8) |
+| **训练步数** | 1 个完整 Epoch (~350 steps), `lr = 2e-4`, 余弦退火 |
+| **单卡训练耗时** | 约 **30 ~ 35 分钟** (T4 显卡) |
 
 ---
 
@@ -40,161 +47,115 @@
 
 ```text
 mygemma/
-├── gemma.ipynb              # 完整端到端微调 Jupyter Notebook
-├── README.md                # 本说明文档
-└── my_gemma_lora/           # 训练完成导出的 LoRA 适配器权重（约 50MB~80MB）
-    ├── adapter_model.safetensors
-    ├── adapter_config.json
-    ├── tokenizer.json
-    └── ...
+├── gemma.ipynb              # 端到端 Colab 微调训练 Notebook (Unsloth + 数据融合)
+├── gemma_tpu.ipynb          # TPU 实验测试 Notebook
+├── chat.py                  # 本地多轮流式对话客户端 (支持 MPS/CUDA, R1 思考链渲染)
+├── requirements.txt         # 核心运行依赖
+├── README.md                # 项目文档
+├── my_gemma_lora/           # 导出的通用微调 LoRA 权重 (~92MB)
+└── my_gemma_r1_lora/        # 导出的 R1 思维链微调 LoRA 权重 (~92MB)
 ```
 
 ---
 
-## 🚀 核心流程与代码解析 (Workflow)
+## 🚀 快速上手 (Quick Start)
 
-整个微调流程已封装在 `gemma.ipynb` 中，主要分为以下步骤：
+### 1. 本地环境准备
 
-### 1. 环境安装
-安装适配 Gemma 4 与 CUDA 环境的加速库：
+推荐使用项目专用的 Python 3.11+ 虚拟环境：
+
 ```bash
-pip install --no-deps "trl<0.9.0" peft accelerate bitsandbytes
-pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+# 1. 克隆/进入项目目录
+cd mygemma
+
+# 2. 创建并激活虚拟环境
+python3 -m venv .venv
+source .venv/bin/activate    # Linux / macOS
+# .venv\Scripts\activate     # Windows
+
+# 3. 安装依赖包
+pip install --upgrade pip
+pip install -r requirements.txt
 ```
 
-### 2. 模型加载与 LoRA 注入
-使用 4-bit 精度加载 Gemma 4，配置注意力层与前馈层的低秩分解矩阵：
-```python
-from unsloth import FastLanguageModel
+### 2. 启动终端智能对话
 
-model, tokenizer = FastLanguageModel.from_pretrained(
-    model_name = "unsloth/gemma-4-E2B-it",
-    max_seq_length = 2048,
-    dtype = None,
-    load_in_4bit = True,
-)
+直接运行 `chat.py` 即可开启交互对话（首次启动会自动下载 Gemma 底座模型，之后秒开）：
 
-model = FastLanguageModel.get_peft_model(
-    model,
-    r = 16,
-    target_modules = ["q_proj", "k_proj", "v_proj", "o_proj", "gate_proj", "up_proj", "down_proj"],
-    lora_alpha = 16,
-    lora_dropout = 0,
-    bias = "none",
-    use_gradient_checkpointing = "unsloth",
-    random_state = 3407,
-)
-```
-
-### 3. 数据集载入与 Gemma 官方模版格式化
-针对 Gemma 的 `<start_of_turn>` 标记进行模板包装：
-```python
-from datasets import load_dataset
-
-dataset = load_dataset("shibing624/alpaca-zh", split="train[:5000]")
-
-def format_prompts(batch):
-    texts = []
-    for inst, inp, out in zip(batch["instruction"], batch["input"], batch["output"]):
-        user_msg = f"{inst}\n{inp}".strip() if inp else inst
-        text = f"<start_of_turn>user\n{user_msg}<end_of_turn>\n<start_of_turn>model\n{out}<end_of_turn>"
-        texts.append(text)
-    return {"text": texts}
-
-dataset = dataset.map(format_prompts, batched = True)
-```
-
-### 4. 启动微调训练
-```python
-from trl import SFTTrainer
-from transformers import TrainingArguments
-
-trainer = SFTTrainer(
-    model = model,
-    tokenizer = tokenizer,
-    train_dataset = dataset,
-    dataset_text_field = "text",
-    max_seq_length = 2048,
-    dataset_num_proc = 2,
-    packing = False,
-    args = TrainingArguments(
-        per_device_train_batch_size = 2,
-        gradient_accumulation_steps = 4,
-        warmup_steps = 10,
-        num_train_epochs = 1,
-        learning_rate = 2e-4,
-        fp16 = True,
-        logging_steps = 10,
-        output_dir = "outputs",
-    ),
-)
-trainer.train()
-```
-
-### 5. 推理验证（多模态兼容规范）
-由于 Gemma 4 属于原生多模态架构，底层采用 `Processor` 处理输入，纯文本推理时需显式传入 `text=[prompt]`：
-```python
-FastLanguageModel.for_inference(model)
-
-prompt = "<start_of_turn>user\n请用通俗易懂的语言解释什么是分布式系统？<end_of_turn>\n<start_of_turn>model\n"
-inputs = tokenizer(text = [prompt], return_tensors = "pt").to("cuda")
-
-outputs = model.generate(**inputs, max_new_tokens = 256, temperature = 0.7)
-print(tokenizer.batch_decode(outputs)[0])
-```
-
----
-
-## 💾 权重导出与部署 (Deployment)
-
-### 方案 A：保存轻量级 LoRA 权重（推荐）
-仅导出增量权重，体积小（约 50MB~80MB），上传与分发极快：
-```python
-model.save_pretrained("my_gemma_lora")
-tokenizer.save_pretrained("my_gemma_lora")
-```
-
-**本地 Python 加载使用**：
-```python
-from peft import PeftModel
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-base_model = AutoModelForCausalLM.from_pretrained("google/gemma-4-E2B-it")
-tokenizer = AutoTokenizer.from_pretrained("google/gemma-4-E2B-it")
-model = PeftModel.from_pretrained(base_model, "./my_gemma_lora")
-```
-
-### 方案 B：本地 Ollama 部署
-如果通过合并导出了 GGUF 文件（如 `my_gemma_model-unsloth.Q4_K_M.gguf`），可在终端直接运行：
 ```bash
-# 编写 Modelfile
-echo "FROM ./my_gemma_model-unsloth.Q4_K_M.gguf" > Modelfile
+python chat.py
+```
 
-# 创建并启动 Ollama 本地服务
-ollama create my-gemma -f Modelfile
-ollama run my-gemma
+* **输入退出**：键入 `exit` 或 `q`
+* **清空历史**：键入 `clear`
+
+终端效果示例：
+
+```text
+============================================================
+🚀 正在启动专属微调模型：Gemma-4-E2B（可思考版）
+============================================================
+⚡️ 检测到 Apple Silicon，已启用 MPS GPU 加速！
+📦 正在加载分词器与基座模型...
+🧩 正在挂载专属 LoRA 微调适配器...
+🎉 模型就绪！输入问题后回车发送。
+============================================================
+
+🧑 你: 9.11 和 9.9 哪个更大？
+🤖 Gemma: <|channel>thought
+Thinking Process:
+1. Analyze the two numbers: 9.11 and 9.9.
+2. Compare the whole number part: both are 9.
+3. Compare the tenths place: 9.11 has 1, 9.9 has 9.
+4. Since 9 > 1, 9.9 is larger.
+<channel|>9.9 更大。因为在十分位上，9.9 是 9，而 9.11 是 1，所以 9.9 大于 9.11。
 ```
 
 ---
 
-## 🛠️ 常见避坑记录 (Troubleshooting)
+## 🛠️ 云端训练指南 (Training in Colab)
 
-1. **`Unsloth cannot find any torch accelerator?`**
-   * **原因**：VS Code 或 Colab 当前连接的是 CPU 运行时。
-   * **解决**：在运行时设置中将硬件加速器切换为 **T4 GPU**。
-2. **`Gemma 4 E4B 内存溢出 (Kernel 崩溃 / SIGKILL: 9)`**
-   * **原因**：T4 显卡不支持硬件级 `bfloat16`，自动提升为 `float32` 导致显存和系统内存需求翻倍；加之 Gemma 4 的 25.6 万巨量词表解压，顶破了 Colab 12GB RAM 限制。
-   * **解决**：改用轻量紧凑的 **Gemma 4 E2B** 或 **Gemma 2 2B**，显存仅占 ~4GB，完全不爆内存。
-3. **`prepare_inputs_layout` 报错**：
-   * **原因**：Gemma 4 是多模态模型，`tokenizer([prompt])` 默认第一项为图像输入。
-   * **解决**：显式传入命名参数 `tokenizer(text = [prompt], return_tensors = "pt")`。
+所有训练逻辑均在 `gemma.ipynb` 中实现：
+
+1. **安装 Unsloth 加速库**：
+   ```bash
+   pip install --no-deps "xformers<0.0.27" "trl<0.9.0" peft accelerate bitsandbytes
+   pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
+   ```
+
+2. **数据载入与标准模板映射**：
+   使用标准对话模板 `<start_of_turn>user\n...<end_of_turn>\n<start_of_turn>model\n...` 格式化训练样本，并将思维链自然包裹于 `<think>` 标签内。
+
+3. **模型保存与下载**：
+   训练结束后执行：
+   ```python
+   model.save_pretrained("my_gemma_r1_lora")
+   tokenizer.save_pretrained("my_gemma_r1_lora")
+   ```
+   下载文件夹后放置于本地项目根目录即可直接由 `chat.py` 挂载。
 
 ---
 
-## 🤝 致谢与协议 (License)
+## 💡 深度推理优化与踩坑总结 (Troubleshooting)
 
-* 基座模型遵循 Google [Gemma Open Model License](https://ai.google.dev/gemma/terms)（允许免费学术与商业使用）；
-* 微调加速框架来自 [Unsloth](https://github.com/unslothai/unsloth)；
-* 训练数据集基于 [alpaca-zh](https://huggingface.co/datasets/shibing624/alpaca-zh)；
-* 本项目的代码与微调权重遵循 [Apache 2.0 开源许可协议](LICENSE)。
+### 1. 推理过程截断，没有输出最终答案？
+* **原因**：R1 蒸馏模型在给出结论前会进行长篇幅的思考链展开，默认的 `max_new_tokens=512` 会在思考未完成时耗尽 Token。
+* **解决**：在 `chat.py` 中将 `max_new_tokens` 提升至 `2048` 或 `4096`。
 
+### 2. `AttributeError: KeyError: 'shape'` 报错？
+* **原因**：新版 `transformers` (v5.x) 中 `apply_chat_template` 返回的是 `BatchEncoding` 字典对象，直接传入 `model.generate()` 会因无法解析 `.shape` 报错。
+* **解决**：代码中通过 `hasattr(encoded, "input_ids")` 显式解包为 Tensor 后再送入模型。
+
+### 3. 小参数模型（2B）推理效果与建议
+* **思考触发不稳定的现象**：2B 极小参数模型在某些直觉简单题上可能偷懒跳过思考通道；
+* **中英跨语言漂移**：纯英文训练思维链容易在“打折”、“成语”等中文语境产生误解（如将“打八折”理解为“80% discount/两折”）；
+* **进阶选型建议**：如果算力有限但追求极高中文推理质量，推荐使用 **Qwen2.5-3B** 或 **Qwen2.5-7B** 作为底座，配合 500~1000 条高质量中文 R1 思维链数据微调，中文表现将大幅跃升。
+
+---
+
+## 🤝 致谢与开源协议 (License)
+
+* 基础模型遵循 Google [Gemma Terms of Use](https://ai.google.dev/gemma/terms)；
+* 训练加速与量化由 [Unsloth AI](https://github.com/unslothai/unsloth) 提供强力支持；
+* 训练语料来源于开源社区 [shibing624/alpaca-zh](https://huggingface.co/datasets/shibing624/alpaca-zh) 与 [Chinese-DeepSeek-R1-Distill-data-110k-SFT](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)；
+* 本项目代码采用 [Apache 2.0 开源许可证](LICENSE)。
