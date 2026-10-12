@@ -1,154 +1,163 @@
 import os
 import sys
 import torch
-from transformers import (
-    AutoTokenizer,
-    AutoModelForCausalLM,
-    TextStreamer,
-    AutoProcessor,
-    StoppingCriteria,
-    StoppingCriteriaList,
-)
-from peft import PeftModel
+from transformers import TextStreamer
 
-class StopOnTurn(StoppingCriteria):
-    def __init__(self, tokenizer, stop_words, prompt_len):
-        super().__init__()
-        self.tok = getattr(tokenizer, "tokenizer", tokenizer)
-        self.stop_words = stop_words
-        self.prompt_len = prompt_len
-
-    def __call__(self, input_ids, scores, **kwargs):
-        # 核心：必须排除前面的 prompt，只检测模型新吐出来的 Token！
-        new_tokens = input_ids[0][self.prompt_len:]
-        if len(new_tokens) == 0:
-            return False
-        last_text = self.tok.decode(new_tokens[-10:], skip_special_tokens=False)
-        return any(w in last_text for w in self.stop_words)
-
+# ── 1. 选择加速设备 ────────────────────────────────────────────────
+def pick_device():
+    if torch.backends.mps.is_available():
+        print("⚡️ 检测到 Apple Silicon，已启用 MPS GPU 加速！")
+        return torch.device("mps"), torch.float16
+    if torch.cuda.is_available():
+        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+        print("⚡️ 已启用 NVIDIA CUDA GPU 加速！")
+        return torch.device("cuda"), dtype
+    print("⚠️  未检测到 GPU，使用 CPU 运行（会比较慢）。")
+    return torch.device("cpu"), torch.float32
 
 
 def main():
     print("=" * 60)
-    print("🚀 正在启动专属微调模型：Gemma-4-E2B-Chinese-Alpaca")
+    print("🚀 正在启动专属微调模型：Gemma-4-E2B（可思考版）")
     print("=" * 60)
 
-    # 1. 自动选择最佳加速硬件 (优先使用 Apple Silicon M2 Metal GPU 加速)
-    if torch.backends.mps.is_available():
-        device = torch.device("mps")
-        dtype = torch.float16
-        print("⚡️ 检测到 Apple Silicon M 系列芯片，已启用 Metal (MPS) GPU 加速！")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-        print("⚡️ 已启用 NVIDIA CUDA GPU 加速！")
-    else:
-        device = torch.device("cpu")
-        dtype = torch.float32
-        print("⚠️ 未检测到 GPU，使用 CPU 运行。")
+    device, dtype = pick_device()
 
-    # 2. 模型与适配器路径配置
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    lora_path = os.path.join(current_dir, "my_gemma_lora")
-    base_model_id = "unsloth/gemma-4-E2B-it"
+    lora_path   = os.path.join(current_dir, "my_gemma_lora")
 
     if not os.path.exists(lora_path):
         print(f"❌ 未找到 LoRA 权重目录: {lora_path}")
-        print("请确保已将 my_gemma_lora 文件夹解压放在当前目录下。")
         sys.exit(1)
 
-    print(f"📦 正在加载分词器...")
+    # ── 2. 用 unsloth 加载（底座是 4-bit 量化版，必须用 unsloth） ──
+    print("📦 正在加载模型与分词器（首次需要下载底座权重约 1.3GB）...")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(lora_path)
-    except Exception:
-        tokenizer = AutoProcessor.from_pretrained(lora_path)
+        from unsloth import FastModel
+        model, tokenizer = FastModel.from_pretrained(
+            lora_path,
+            max_seq_length = 8192,    # 上下文窗口
+            load_in_4bit   = True,    # 与训练时保持一致
+        )
+        FastModel.for_inference(model)  # 开启推理加速
+        print("✅ unsloth FastModel 加载成功！")
+        use_unsloth = True
+    except ImportError:
+        print("⚠️  未安装 unsloth，回退到标准 transformers 加载...")
+        use_unsloth = False
 
-    print(f"📥 正在加载基座模型 ({base_model_id})...")
-    print("   (首次运行会自动下载官方底座权重，大约 3.5GB，之后将直接从本地缓存秒开)")
-    
-    try:
+    if not use_unsloth:
+        # 回退方案：用标准 peft + transformers（速度较慢）
+        from transformers import AutoTokenizer, AutoModelForCausalLM
+        from peft import PeftModel
+
+        tokenizer  = AutoTokenizer.from_pretrained(lora_path)
         base_model = AutoModelForCausalLM.from_pretrained(
-            base_model_id,
-            torch_dtype = dtype,
+            "unsloth/gemma-4-E2B-it",   # 非量化公开版底座
+            torch_dtype       = dtype,
             low_cpu_mem_usage = True,
         )
-    except Exception as e:
-        print(f"尝试加载时发生错误: {e}")
-        print("正在尝试通用多模态架构兼容加载...")
-        from transformers import AutoModelForImageTextToText
-        base_model = AutoModelForImageTextToText.from_pretrained(
-            base_model_id,
-            torch_dtype = dtype,
-            low_cpu_mem_usage = True,
-        )
+        model = PeftModel.from_pretrained(base_model, lora_path)
+        model.to(device)
+        model.eval()
 
-    print(f"🧩 正在挂载专属 LoRA 微调适配器 ({lora_path})...")
-    model = PeftModel.from_pretrained(base_model, lora_path)
-    model.to(device)
-    model.eval()
-
-    # 3. 创建实时流式打字器 (像 ChatGPT / Ollama 一样逐字吐出回答)
-    streamer = TextStreamer(
-        getattr(tokenizer, "tokenizer", tokenizer),
-        skip_prompt = True,
-        skip_special_tokens = True,
-    )
+    # ── 3. 流式输出器 ─────────────────────────────────────────────
+    actual_tok = getattr(tokenizer, "tokenizer", tokenizer)
+    streamer   = TextStreamer(actual_tok, skip_prompt=True, skip_special_tokens=False)
 
     print("\n" + "=" * 60)
-    print("🎉 模型加载完成！随时可以开始对话。")
-    print("💡 提示：输入内容后按回车发送；输入 'exit' 或 'q' 退出程序。")
+    print("🎉 模型就绪！输入问题后回车发送。")
+    print("💡 输入 'exit' / 'q' 退出；输入 'clear' 清空对话历史。")
     print("=" * 60 + "\n")
 
-    # 提取 Gemma 专用的对话结束标记 ID (<end_of_turn> 和 <eos>)，装上“刹车片”
-    actual_tok = getattr(tokenizer, "tokenizer", tokenizer)
-    stop_token_ids = [actual_tok.eos_token_id]
-    end_id = actual_tok.convert_tokens_to_ids("<end_of_turn>")
-    if end_id is not None and end_id != actual_tok.unk_token_id:
-        stop_token_ids.append(end_id)
-    stop_token_ids = list(set([tid for tid in stop_token_ids if tid is not None]))
+    history = []   # [{"role": "user"/"assistant", "content": "..."}]
 
     while True:
         try:
             user_input = input("🧑 你: ").strip()
-            if not user_input:
-                continue
-            if user_input.lower() in ["exit", "quit", "q"]:
-                print("👋 再见！")
-                break
-
-            prompt = f"<start_of_turn>user\n{user_input}<end_of_turn>\n<start_of_turn>model\n"
-
-            # 兼容多模态 Processor 与纯文本 Tokenizer
-            if hasattr(tokenizer, "tokenizer"):
-                inputs = tokenizer(text = [prompt], return_tensors = "pt").to(device)
-            else:
-                inputs = tokenizer([prompt], return_tensors = "pt").to(device)
-
-            # 动态终止监听器（只监控新生成的 token，忽略 prompt 前缀）
-            prompt_len = inputs.input_ids.shape[1]
-            stop_criteria = StoppingCriteriaList([
-                StopOnTurn(tokenizer, ["<end_of_turn>", "<turn|>"], prompt_len)
-            ])
-
-            print("🤖 Gemma: ", end = "", flush = True)
-            with torch.no_grad():
-                model.generate(
-                    **inputs,
-                    streamer = streamer,
-                    max_new_tokens = 512,
-                    temperature = 0.7,
-                    top_p = 0.9,
-                    do_sample = True,
-                    eos_token_id = stop_token_ids,
-                    stopping_criteria = stop_criteria,
-                )
-            print()
-
-        except KeyboardInterrupt:
-            print("\n👋 已中断对话。")
+        except (EOFError, KeyboardInterrupt):
+            print("\n👋 再见！")
             break
-        except Exception as e:
-            print(f"\n⚠️ 生成过程中发生异常: {e}\n")
+
+        if not user_input:
+            continue
+        if user_input.lower() in ("exit", "quit", "q"):
+            print("👋 再见！")
+            break
+        if user_input.lower() == "clear":
+            history.clear()
+            print("🧹 对话历史已清空。\n")
+            continue
+
+        history.append({"role": "user", "content": user_input})
+
+        # ── 4. 用 chat_template 构造 prompt（含 enable_thinking） ──
+        # apply_chat_template 在新版 transformers 返回 BatchEncoding（字典），
+        # 需要显式取出 input_ids tensor 才能传给 generate()
+        try:
+            encoded = tokenizer.apply_chat_template(
+                history,
+                tokenize              = True,
+                add_generation_prompt = True,
+                return_tensors        = "pt",
+                enable_thinking       = True,   # 🧠 启用推理链
+            )
+        except TypeError:
+            # 旧版 transformers 不支持 enable_thinking 参数，降级处理
+            encoded = tokenizer.apply_chat_template(
+                history,
+                tokenize              = True,
+                add_generation_prompt = True,
+                return_tensors        = "pt",
+            )
+
+        # 兼容返回纯 tensor 或 BatchEncoding 两种情况
+        if hasattr(encoded, "input_ids"):
+            prompt_ids = encoded.input_ids
+        else:
+            prompt_ids = encoded
+
+        target_device = model.device if hasattr(model, "device") else device
+        prompt_ids    = prompt_ids.to(target_device)
+        prompt_len    = prompt_ids.shape[-1]
+
+        # ── 5. 推理生成 ───────────────────────────────────────────
+        print("🤖 Gemma: ", end="", flush=True)
+        with torch.no_grad():
+            output_ids = model.generate(
+                prompt_ids,
+                streamer       = streamer,
+                max_new_tokens = 4096,    # 思考链需要较多 token
+                temperature    = 0.6,     # 推理模型建议低温
+                top_p          = 0.9,
+                do_sample      = True,
+                pad_token_id   = actual_tok.eos_token_id,
+            )
+        print()
+
+        # ── 6. 提取模型回复，加入历史（剥离思考链，只保留最终答案） ──
+        new_ids    = output_ids[0][prompt_len:]
+        full_reply = actual_tok.decode(new_ids, skip_special_tokens=False)
+
+        # 剥离 <|channel|>thought\n...<turn|> 思考块，只把最终答案存入历史
+        import re
+        clean_reply = re.sub(
+            r"<\|channel\|>thought\n.*?<turn\|>",
+            "",
+            full_reply,
+            flags=re.DOTALL,
+        ).strip()
+        # 兼容 <think>...</think> 格式
+        clean_reply = re.sub(
+            r"<think>.*?</think>",
+            "",
+            clean_reply,
+            flags=re.DOTALL,
+        ).strip()
+
+        if clean_reply:
+            history.append({"role": "assistant", "content": clean_reply})
+
 
 if __name__ == "__main__":
     main()

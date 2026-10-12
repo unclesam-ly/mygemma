@@ -17,3 +17,5 @@ outputs/
 *.tar.gz
 my_gemma_model/
 my_gemma_lora_temp/
+
+gemma_tpu.ipynb
