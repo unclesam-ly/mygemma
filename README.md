@@ -1,45 +1,45 @@
-# Gemma-4-E2B-Chinese-R1 🧠✨
+# Qwen2.5-3B & Gemma 4 深度思考微调实战 (DeepSeek-R1 CoT Distillation)
 
-基于 **Google Gemma 4 (E2B)** 原生轻量基座，在 **Google Colab (Tesla T4 GPU)** 上使用 **Unsloth + QLoRA (4-bit)** 完成的**通用中文指令 + DeepSeek-R1 深度思考链（CoT）**双融合微调项目。
+本项目记录了在低算力资源约束（**Google Colab Tesla T4 15GB 单卡**）下，使用 **Unsloth + QLoRA (4-bit)** 框架，对轻量级开源大模型（**Qwen2.5-3B** 与 **Gemma 4-E2B**）进行 **DeepSeek-R1 纯中文深度思维链（CoT）慢思考蒸馏** 的完整实战全流程。
 
-包含端到端训练 Notebook，以及针对 **Apple Silicon (Mac M系列 MPS 加速) / NVIDIA CUDA** 深度优化的流式交互终端对话脚本 `chat.py`。
+包含 20 分钟极速训练 Notebook、本地 Apple Silicon (Metal MPS) GPU 流式推理交互终端，以及真实复杂的逻辑与业务场景评测记录。
 
-[![Base Model](https://img.shields.io/badge/Base%20Model-Google%20Gemma%204%20E2B-blue)](https://huggingface.co/google)
+[![Base Model](https://img.shields.io/badge/Base%20Model-Qwen2.5--3B%20%7C%20Gemma%204-blue)](https://huggingface.co/Qwen)
 [![Fine-Tuning](https://img.shields.io/badge/Method-QLoRA%204--bit%20(Unsloth)-green)](https://github.com/unslothai/unsloth)
-[![Alpaca Dataset](https://img.shields.io/badge/Dataset-alpaca--zh%20(2k)-orange)](https://huggingface.co/datasets/shibing624/alpaca-zh)
-[![R1 Dataset](https://img.shields.io/badge/Dataset-DeepSeek--R1--Distill%20(1k)-purple)](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)
+[![Dataset](https://img.shields.io/badge/Dataset-Chinese--DeepSeek--R1--Distill-orange)](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)
+[![Hardware](https://img.shields.io/badge/Inference-Apple%20Silicon%20MPS-black)](https://developer.apple.com/metal/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-lightgrey)](LICENSE)
 
 ---
 
-## 🌟 项目特色 (Highlights)
+## 📖 项目亮点 (Highlights)
 
-* **极低算力成本**：在 Google Colab 免费级 **Tesla T4 (15GB)** 单卡上，通过 Unsloth 4-bit 量化仅耗时约 **35 分钟** 即可完成微调，极度节省算力单元。
-* **双模态能力融合**：
-  * **2,000 条** `alpaca-zh`：赋予基座规范、流畅的日常中文问答与指令遵循能力；
-  * **1,000 条** `Chinese-DeepSeek-R1-Distill`：注入 DeepSeek-R1 `<think>` 慢思考灵魂，支持逻辑反思与逐步推导。
-* **开箱即用的终端交互 (`chat.py`)**：
-  * ⚡ **自动硬件加速**：原生优先调用 Apple Silicon 的 **Metal (MPS)** GPU 加速，同时支持 NVIDIA CUDA 与 CPU 优雅降级；
-  * 🌊 **实时打字机流式输出**：基于 `TextStreamer` 逐字吐出推理与回答；
-  * 🧠 **思维链管理与历史隔离**：实时展示思考过程，在多轮对话中自动剥离思考痕迹，仅将最终回答存入上下文，防止历史窗口污染与漂移。
+* **极致算力性价比**：
+  * 基于 `unsloth/Qwen2.5-3B-Instruct-bnb-4bit` 预量化底座；
+  * 仅需消费级/免费级 **Tesla T4 (15GB)** 显卡，显存占用仅 **~3.5GB**；
+  * 全流程微调仅需 **18 ~ 22 分钟**，消耗不到 1 个计算单元（Compute Unit）。
+* **纯血中文思维链对齐**：
+  * 精选 1,000 条严格闭环的中文 DeepSeek-R1 `<think>...</think>` 推理数据；
+  * 彻底解决轻量级模型“中英思维漂移”与“偷懒跳过思考通道”两大硬伤。
+* **干净轻量的 Mac 本地推理客户端 (`chat.py`)**：
+  * 原生启用 Apple Silicon **Metal (MPS)** GPU 加速，秒级启动；
+  * 自动管理多轮对话，流式输出思考过程，并在存入历史前自动剥离思考痕迹；
+  * 针对 3B 小模型调优低温度（`temperature = 0.2`），有效压制过度反思综合征。
 
 ---
 
-## ⚙️ 实验与微调配置 (Configuration)
+## ⚡ 实测推理战报 (Benchmark & Results)
 
-| 维度 | 配置详情 |
-| :--- | :--- |
-| **计算平台** | Google Colab (通过 VS Code 远程连接) |
-| **计算卡** | NVIDIA Tesla T4 (15.36 GB 显存) |
-| **基础底座** | `unsloth/gemma-4-E2B-it` (4-bit 预量化版本) |
-| **微调算法** | QLoRA (Rank $r=16$, $\alpha=16$, dropout=0) |
-| **LoRA 目标模块** | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_proj`, `up_proj`, `down_proj` |
-| **融合数据集** | `alpaca-zh` (2000条) + `Chinese-DeepSeek-R1-Distill-110k` (1000条过滤精选) |
-| **总数据量** | 2,778 条有效混合样本 |
-| **序列长度** | `max_seq_length = 2048` |
-| **Batch 大小** | `per_device_batch_size = 2`, `gradient_accumulation_steps = 4` (等效 Batch = 8) |
-| **训练步数** | 1 个完整 Epoch (~350 steps), `lr = 2e-4`, 余弦退火 |
-| **单卡训练耗时** | 约 **30 ~ 35 分钟** (T4 显卡) |
+在本地通过 `chat.py` 对微调后的 **Qwen2.5-3B-R1** 进行了 4 道经典逻辑、数学陷阱与实际业务问题的实测：
+
+| 测试题目 | 题目类型 | 思考表现 | 测试结果 |
+| :--- | :--- | :--- | :---: |
+| **打折陷阱**：一件商品先降价 20%，随后又涨价 20%，现价比原价高还是低？相差百分之几？ | 中文商业数学 | `<think>` 内清晰推导：100 → 80 → 96，差额 4 元，无过度怀疑，果断收敛。 | **通过 (4%)** |
+| **工程并发效率**：3 个人挖 3 个坑需要 3 天。9 个人挖 9 个坑需要多少天？ | 归一/并发逻辑 | 识破直觉陷阱，在思考链中指明“人数与任务等比例增加，单人单坑耗时不变”。 | **通过 (3天)** |
+| **仓储机器人调度**：A 车电量 85% 距桩 10 米，B 车电量 12% 距桩 60 米，单桩空闲选谁？ | 工业调度运筹 | 准确识别低电量引发死锁断电的业务风险，分析多维度约束，决策逻辑严密。 | **通过 (优先B车)** |
+| **恒定年龄差**：我 6 岁时妹妹是我的一半。当我 70 岁时妹妹几岁？ | 语言歧义陷阱 | 误将“我的一半”当成了固定绑定函数（70÷2=35），属于小模型典型字面理解盲区。 | 未通过 (35岁) |
+
+> **实测总评**：在仅微调 1,000 条数据、耗时 20 分钟的前提下，3B 小模型取得了 **75% 的高难度陷阱题命中率**。
 
 ---
 
@@ -47,115 +47,106 @@
 
 ```text
 mygemma/
-├── gemma.ipynb              # 端到端 Colab 微调训练 Notebook (Unsloth + 数据融合)
-├── gemma_tpu.ipynb          # TPU 实验测试 Notebook
-├── chat.py                  # 本地多轮流式对话客户端 (支持 MPS/CUDA, R1 思考链渲染)
+├── qwen_train.ipynb         # [推荐] Qwen2.5-3B + R1 思考微调 Notebook (Colab 20分钟跑通)
+├── gemma.ipynb              # Gemma 4-E2B 前期微调探索 Notebook
+├── chat.py                  # 本地多轮流式对话客户端 (支持 MPS 加速 / 纯净文本界面)
 ├── requirements.txt         # 核心运行依赖
-├── README.md                # 项目文档
-├── my_gemma_lora/           # 导出的通用微调 LoRA 权重 (~92MB)
-└── my_gemma_r1_lora/        # 导出的 R1 思维链微调 LoRA 权重 (~92MB)
+├── README.md                # 项目全景技术文档
+├── my_qwen_r1_lora/         # 导出的 Qwen2.5-3B LoRA 配置与分词器 (权重已通过 gitignore 规避)
+└── my_gemma_lora/           # 导出的 Gemma 4 LoRA 适配器权重
 ```
 
 ---
 
-## 🚀 快速上手 (Quick Start)
+## 🚀 本地运行体验 (Local Quick Start)
 
-### 1. 本地环境准备
-
-推荐使用项目专用的 Python 3.11+ 虚拟环境：
+### 1. 环境准备
 
 ```bash
-# 1. 克隆/进入项目目录
+# 进入项目目录
 cd mygemma
 
-# 2. 创建并激活虚拟环境
+# 创建并激活专用虚拟环境
 python3 -m venv .venv
-source .venv/bin/activate    # Linux / macOS
+source .venv/bin/activate    # macOS / Linux
 # .venv\Scripts\activate     # Windows
 
-# 3. 安装依赖包
+# 安装核心依赖
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2. 启动终端智能对话
+### 2. 启动流式对话客户端
 
-直接运行 `chat.py` 即可开启交互对话（首次启动会自动下载 Gemma 底座模型，之后秒开）：
+确保 `my_qwen_r1_lora` 权重目录位于项目根目录下，直接执行：
 
 ```bash
 python chat.py
 ```
 
-* **输入退出**：键入 `exit` 或 `q`
-* **清空历史**：键入 `clear`
+* **退出对话**：输入 `exit` 或 `q`
+* **清空历史**：输入 `clear`
 
-终端效果示例：
+**终端运行效果预览**：
 
 ```text
 ============================================================
-🚀 正在启动专属微调模型：Gemma-4-E2B（可思考版）
+启动专属微调推理模型: Qwen2.5-3B (DeepSeek-R1 思考版)
 ============================================================
-⚡️ 检测到 Apple Silicon，已启用 MPS GPU 加速！
-📦 正在加载分词器与基座模型...
-🧩 正在挂载专属 LoRA 微调适配器...
-🎉 模型就绪！输入问题后回车发送。
+[硬件] 检测到 Apple Silicon，已启用 Metal (MPS) GPU 加速
+[加载] 正在加载分词器: /path/to/my_qwen_r1_lora
+[加载] 正在加载 Qwen2.5-3B 底座权重 (Qwen/Qwen2.5-3B-Instruct)...
+[挂载] 正在注入 LoRA 适配器: /path/to/my_qwen_r1_lora
+
+模型加载完成。输入问题后回车发送。
+提示: 输入 'exit' 或 'q' 退出；输入 'clear' 清空对话历史。
 ============================================================
 
-🧑 你: 9.11 和 9.9 哪个更大？
-🤖 Gemma: <|channel>thought
-Thinking Process:
-1. Analyze the two numbers: 9.11 and 9.9.
-2. Compare the whole number part: both are 9.
-3. Compare the tenths place: 9.11 has 1, 9.9 has 9.
-4. Since 9 > 1, 9.9 is larger.
-<channel|>9.9 更大。因为在十分位上，9.9 是 9，而 9.11 是 1，所以 9.9 大于 9.11。
+你: 3 个人挖 3 个坑需要 3 天。照这个工作速度，9 个人挖 9 个坑需要多少天？
+Qwen: <think>
+题目中的条件是“3个人挖3个坑需要3天”。这里的关键点在于每个人的工作时间不变，无论人数如何变化。
+每个人挖一个坑需要3天，当增加到9个人时，每个人仍然需要3天完成自己的任务，而9个人同时工作，每个人的工作时间不变。
+</think>
+总的工作时间仍然是每个人的工作时间，即 3 天。
 ```
 
 ---
 
-## 🛠️ 云端训练指南 (Training in Colab)
+## 🛠️ 云端微调实战指南 (Training on Colab)
 
-所有训练逻辑均在 `gemma.ipynb` 中实现：
+所有训练逻辑均封装在 [`qwen_train.ipynb`](file:///Users/mac/IT/mygemma/qwen_train.ipynb) 中，仅需 3 步：
 
-1. **安装 Unsloth 加速库**：
-   ```bash
-   pip install --no-deps "xformers<0.0.27" "trl<0.9.0" peft accelerate bitsandbytes
-   pip install "unsloth[colab-new] @ git+https://github.com/unslothai/unsloth.git"
-   ```
-
-2. **数据载入与标准模板映射**：
-   使用标准对话模板 `<start_of_turn>user\n...<end_of_turn>\n<start_of_turn>model\n...` 格式化训练样本，并将思维链自然包裹于 `<think>` 标签内。
-
-3. **模型保存与下载**：
-   训练结束后执行：
-   ```python
-   model.save_pretrained("my_gemma_r1_lora")
-   tokenizer.save_pretrained("my_gemma_r1_lora")
-   ```
-   下载文件夹后放置于本地项目根目录即可直接由 `chat.py` 挂载。
+1. **上传 Notebook**：打开 [Google Colab](https://colab.research.google.com/)，上传 `qwen_train.ipynb`；
+2. **选择 GPU 规格**：运行时设置硬件加速器为 **T4 GPU**；
+3. **点击全部运行**：
+   * 自动安装 Unsloth 极速框架；
+   * 自动加载预量化 4-bit 底座；
+   * 自动过滤 1,000 条纯中文 R1 思维链数据；
+   * 训练 1 个 Epoch（约 18 分钟）；
+   * 现场自动测试开炉效果，并自动将权重打包为 `my_qwen_r1_lora.zip` 下载至本地。
+4. **断开释放**：下载完成后，及时点击 `代码执行程序 -> 断开连接并删除运行时` 即可锁住算力。
 
 ---
 
-## 💡 深度推理优化与踩坑总结 (Troubleshooting)
+## 💡 核心经验与避坑实录 (Lessons Learned)
 
-### 1. 推理过程截断，没有输出最终答案？
-* **原因**：R1 蒸馏模型在给出结论前会进行长篇幅的思考链展开，默认的 `max_new_tokens=512` 会在思考未完成时耗尽 Token。
-* **解决**：在 `chat.py` 中将 `max_new_tokens` 提升至 `2048` 或 `4096`。
+### 1. 底座语料分布的重要性（Gemma vs Qwen）
+* **Gemma 4** 英文语料占绝大多数，在中文推理中容易出现“先在心里翻译为英文再思考”的跨语言偏差（如将中文特有的“打八折”误翻为“80% discount / 打两折”）；
+* **Qwen2.5** 拥有深厚的原生中文预训练语料沉淀，在面对中文成语、商业习惯及多步归一数学题时表现极为稳健。
 
-### 2. `AttributeError: KeyError: 'shape'` 报错？
-* **原因**：新版 `transformers` (v5.x) 中 `apply_chat_template` 返回的是 `BatchEncoding` 字典对象，直接传入 `model.generate()` 会因无法解析 `.shape` 报错。
-* **解决**：代码中通过 `hasattr(encoded, "input_ids")` 显式解包为 Tensor 后再送入模型。
+### 2. 小参数模型（3B）的“反思退化 / 过度内耗”
+* **现象**：3B 级别模型学习了 R1 思维链中的“自我怀疑（Wait, let me double check）”模式，但在较高温度采样下容易在初次算对后，脑补各种不存在的限制，从而推翻正确答案；
+* **解法**：在推理阶段将采样温度收紧至 `temperature = 0.2`（或使用贪婪采样），能有效促使模型在首次严密推导后迅速收敛并输出结论。
 
-### 3. 小参数模型（2B）推理效果与建议
-* **思考触发不稳定的现象**：2B 极小参数模型在某些直觉简单题上可能偷懒跳过思考通道；
-* **中英跨语言漂移**：纯英文训练思维链容易在“打折”、“成语”等中文语境产生误解（如将“打八折”理解为“80% discount/两折”）；
-* **进阶选型建议**：如果算力有限但追求极高中文推理质量，推荐使用 **Qwen2.5-3B** 或 **Qwen2.5-7B** 作为底座，配合 500~1000 条高质量中文 R1 思维链数据微调，中文表现将大幅跃升。
+### 3. GitHub 100MB 单文件限制
+* 导出的 `adapter_model.safetensors` 文件体积约 114MB，超过了 GitHub 普通仓库单文件 100MB 的上限；
+* 本项目通过在 [`.gitignore`](file:///Users/mac/IT/mygemma/.gitignore) 中排除该大文件，同时保留完整配置文件、分词器与重现代码，确保仓库能够顺利进行常规 Git 推送。
 
 ---
 
-## 🤝 致谢与开源协议 (License)
+## 🤝 致谢与协议 (License)
 
-* 基础模型遵循 Google [Gemma Terms of Use](https://ai.google.dev/gemma/terms)；
-* 训练加速与量化由 [Unsloth AI](https://github.com/unslothai/unsloth) 提供强力支持；
-* 训练语料来源于开源社区 [shibing624/alpaca-zh](https://huggingface.co/datasets/shibing624/alpaca-zh) 与 [Chinese-DeepSeek-R1-Distill-data-110k-SFT](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)；
-* 本项目代码采用 [Apache 2.0 开源许可证](LICENSE)。
+* 基础模型由 [Alibaba Qwen 团队](https://github.com/QwenLM/Qwen2.5) 与 [Google Gemma 团队](https://ai.google.dev/gemma) 开源；
+* 微调加速由 [Unsloth AI](https://github.com/unslothai/unsloth) 提供强力支持；
+* 训练语料来源于 [Chinese-DeepSeek-R1-Distill-data-110k-SFT](https://huggingface.co/datasets/Congliu/Chinese-DeepSeek-R1-Distill-data-110k-SFT)；
+* 本仓库代码与 Notebook 遵循 [Apache 2.0 开源许可协议](LICENSE)。
