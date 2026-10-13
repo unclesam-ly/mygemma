@@ -17,5 +17,6 @@ outputs/
 *.tar.gz
 my_gemma_model/
 my_gemma_lora_temp/
+my_qwen_r1_lora/adapter_model.safetensors
 
 gemma_tpu.ipynb
